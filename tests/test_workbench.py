@@ -21,5 +21,6 @@ def test_own_flow_same_engine(client):
 def test_html_has_navigation(client):
     response=client.get('/')
     assert response.status_code==200
-    assert response.text.count('data-panel=')==7
+    assert response.text.count('data-panel=')==8
     assert client.get('/static/coupon-grid.js').status_code==200
+    assert client.get('/static/settlement.js').status_code==200

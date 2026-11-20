@@ -36,3 +36,6 @@ textarea { width:100%; }
 @media (max-width:990px) { .spread { grid-template-columns:minmax(0,1fr); } }
 @media (max-width:640px) { body { grid-template-columns:minmax(0,1fr); } .sidebar { padding:11px; gap:9px; border:none; } nav { display:flex; flex-wrap:wrap; gap:3px; } nav a { padding:4px 7px; font-size:13px; } .shop-label { display:none; } main { padding:13px 9px; } .kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } .kpi { border-bottom:1px solid var(--line); } .panel { padding:12px; } }
 @media print { body,.spread { display:block; background:white; } .sidebar,.toolbar,.import-box,button,footer { display:none; } .panel { border:none; } .scroll { max-height:none; overflow:visible; } }
+.publish-zone { margin-top:14px; padding-top:12px; border-top:1px solid var(--line); display:grid; gap:8px; }
+.publish-zone .hint { color:var(--muted,#7a7488); font-size:13px; margin:0; }
+.publish-zone button.accent { justify-self:start; }

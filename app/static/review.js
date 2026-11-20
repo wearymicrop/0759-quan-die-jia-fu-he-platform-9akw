@@ -1,7 +1,8 @@
 import {cash,el,grid,head,pill,reason,text} from './format.js';
 import {optimizer,rulesGrid} from './coupon-grid.js';
+import {settlementView} from './settlement.js';
 
-let result=null, archived=null, selected='', revision=0, custom=false;
+let result=null, archived=null, selected='', settlementOrder='', revision=0, custom=false;
 const tabs=[...document.querySelectorAll('nav a')];
 const feedback=message=>{el('#feedback').textContent=message;};
 const current=()=>tabs.find(tab=>tab.hash===location.hash)||tabs[0];
@@ -28,6 +29,11 @@ function view(key,sale,picker) {
       return [head('退货原摊流水')+refundRows(d.filter(r=>r.status==='posted')),head('退货隔离')+refundRows(d.filter(r=>r.status==='isolated'))];
     case 'reconcile':
       return [head('逐笔实收差异',pill(d.status==='MATCHED'?'总额对平':'存在差异',d.status==='MATCHED'?'good':'bad'))+grid(['业务键','来源行','差异','金额'],d.differences.map(x=>[x.id,x.source_line,reason(x.reason),cash(x.gap)]),[3]),head('分摊守恒')+grid(['小票','明细','原分摊实付','已退','未退'],d.lines.map(x=>[x.order,x.line,cash(x.actual),cash(x.refunded),cash(x.retained)]),[2,3,4])];
+    case 'settlement': {
+      const sheet=d.sheets.find(row=>row.order===settlementOrder)||d.sheets[0];
+      const orderPicker=`<select id="settlement-order" aria-label="选择退货原票">${d.sheets.map(row=>`<option ${row===sheet?'selected':''}>${text(row.order)}</option>`).join('')}</select>`;
+      return settlementView(result,sheet,orderPicker);
+    }
     case 'trace': {
       const packet=d.packets.find(row=>row.order===sale?.id);
       const control=archived?`<p class="hash">${text(archived.id)}</p><div class="tags"><button id="rerun">核验重算</button></div><a class="download" href="/api/runs/${archived.id}/export">导出追溯联单</a>`:'<p>保存联单后可导出</p>';
@@ -48,7 +54,36 @@ function paint() {
   const picker=`<select id="receipt" aria-label="选择小票">${result.optimizer.map(row=>`<option ${row===sale?'selected':''}>${text(row.id)}</option>`).join('')}</select>`;
   const panels=view(tab.dataset.panel,sale,picker);
   el('#receipt-panel').innerHTML=panels[0]; el('#matrix-panel').innerHTML=panels[1];
+  if(tab.dataset.panel==='settlement')mountPublish();
   el('#snapshot').textContent=archived?`${archived.manifest.rule_version} · ${archived.id.slice(0,12)}`:'retail-promo-1.0 · 样例预览';
+}
+
+function mountPublish(){
+  const host=el('#matrix-panel');
+  const d=result.settlement;
+  const sheet=d.sheets.find(row=>row.order===settlementOrder)||d.sheets[0];
+  if(!sheet)return;
+  const zone=document.createElement('div');
+  zone.className='publish-zone';
+  const already=archived?.settlements?.some(row=>row.id===sheet.id);
+  zone.innerHTML=`<h3>复核单发布</h3>
+    <div class="tags">${already?pill('已发布（同单重试不重复冲减）','good'):pill(sheet.publishable?'满足发布条件':'存在阻断，禁止发布',sheet.publishable?'good':'bad')}</div>
+    <button id="publish-sheet" class="accent" ${(!archived||!sheet.publishable||already)?'disabled':''}>${already?'已入账':'发布复核单'}</button>
+    ${!archived?'<p class="hint">先在右上角「保存联单」归档批次后才能发布</p>':''}
+    ${d.orphan_returns.length?`<p class="hint">孤儿退货（缺原票）：${d.orphan_returns.map(r=>text(r.id)).join('、')}</p>`:''}`;
+  host.appendChild(zone);
+}
+
+async function publishSheet(){
+  const d=result.settlement;
+  const sheet=d.sheets.find(row=>row.order===settlementOrder)||d.sheets[0];
+  if(!sheet||!archived)return;
+  try{
+    const record=await query(`/api/runs/${archived.id}/settlements/${sheet.id}/publish`,{});
+    archived.settlements=[...(archived.settlements||[]),record];
+    feedback(record.reused?'该复核单已发布，未重复冲减':`复核单 ${sheet.order} 已发布`);
+    paint();
+  }catch(error){feedback(error.message);}
 }
 
 async function load() {
@@ -57,7 +92,7 @@ async function load() {
   try {
     const data=await query(`/api/samples/${sample}`);
     if(seq!==revision)return;
-    result=data;archived=null;selected='';custom=false;paint();
+    result=data;archived=null;selected='';settlementOrder='';custom=false;paint();
     feedback(result.reconcile.status==='MATCHED'?'交易与退款已对平':'发现实收差异');
   }catch(error){if(seq===revision)feedback(error.message);}
 }
@@ -81,12 +116,16 @@ el('#source-form').addEventListener('submit',event=>{
   try{save({events:el('#events').value,rules:JSON.parse(el('#rules').value)});}
   catch{feedback('规则集需为有效 JSON');}
 });
-document.addEventListener('change',event=>{if(event.target.id==='receipt'){selected=event.target.value;paint();el('#receipt').focus();}});
+document.addEventListener('change',event=>{
+  if(event.target.id==='receipt'){selected=event.target.value;paint();el('#receipt').focus();}
+  if(event.target.id==='settlement-order'){settlementOrder=event.target.value;paint();el('#settlement-order').focus();}
+});
 document.addEventListener('click',async event=>{
   if(event.target.id==='rerun'&&archived){
     try{await query(`/api/runs/${archived.id}/rerun`,{});feedback('重算与联单一致');}
     catch(error){feedback(error.message);}
   }
+  if(event.target.id==='publish-sheet')publishSheet();
 });
 window.addEventListener('hashchange',paint);
 load();

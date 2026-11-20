@@ -19,7 +19,7 @@ def test_cents_normalized(clean):  # TRAP-06
 
 
 def test_ambiguous_sentinel_isolated(dirty):  # TRAP-07
-    row=dirty['receipts']['rows'][-1]
+    row=next(r for r in dirty['receipts']['rows'] if '000752' in r['raw'])
     assert row['code']=='BAD_EVENT' and '未知' in row['raw']
 
 

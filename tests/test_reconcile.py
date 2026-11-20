@@ -36,4 +36,4 @@ def test_missing_row_detected(clean):
 def test_structural_gaps_are_zero_even_when_cash_differs(dirty):
     result=dirty['reconcile']
     assert (result['formula_gap'],result['retention_gap'])==(0,0)
-    assert result['totals']['due']-result['totals']['refunded']==129705
+    assert result['totals']['due']-result['totals']['refunded']==130555

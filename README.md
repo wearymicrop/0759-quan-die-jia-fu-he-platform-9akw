@@ -15,13 +15,15 @@ docker compose up --build
 1. 选「含差异流水」，打开「优惠求解」。小票 `000731` 选择「品类九折」和「店券5」，实付复算为 49.00 元。规则方阵展示哪些组合互斥。
 2. 小票 `000732` 的一分钱尾差落给明细 `01`。在「退单冲回」可核对原小票跨日退货，在「金额对账」查看真实收款与复算的分级差异。
 3. 选择「保存联单」并打开「追溯联单」，复核原票与退票关联，执行重算并导出证据。
-4. 自带数据可从「复核自备流水」粘贴逐行 JSON 与规则集。样例位于 `sample_data/`，字段见 [数据字典](docs/DATA-DICTIONARY.md)。
+4. 在「退货结算」按原票查看唯一复核单：原组合、剩余可用组合、已退/未退与差异来源。满足闸门时点「发布复核单」，同单重试只入账一次；缺原票、原单隔离、逐行不平或退货被阻断时禁止发布。小票 `000760` 演示分次退货后剩余商品不达「满30减6」门槛，差异只解释不回滚已退款。
+5. 自带数据可从「复核自备流水」粘贴逐行 JSON 与规则集。样例位于 `sample_data/`，字段见 [数据字典](docs/DATA-DICTIONARY.md)。
 
 ## 接口
 
 - `GET /api/health` 检查存储连通性。
-- `GET /api/samples/clean` 和 `GET /api/samples/dirty` 返回计算结果。七个子路径分别是 `receipts`、`versions`、`eligibility`、`optimizer`、`refunds`、`reconcile`、`trace`。求解支持 `?receipt=000731`，冲回支持 `?event=R001`。
+- `GET /api/samples/clean` 和 `GET /api/samples/dirty` 返回计算结果。八个子路径分别是 `receipts`、`versions`、`eligibility`、`optimizer`、`refunds`、`reconcile`、`settlement`、`trace`。求解支持 `?receipt=000731`，冲回支持 `?event=R001`，结算支持 `?order=000760`。
 - `POST /api/runs` 接收 `{"sample":"dirty"}` 或 `{"events":"逐行流水","rules":{...}}`。`GET /api/runs/{id}` 查询归档，`POST /api/runs/{id}/rerun` 重算，`GET /api/runs/{id}/export` 下载附件。
+- `POST /api/runs/{id}/settlements/{sheet}/publish` 发布复核单（同键重试幂等），`GET /api/runs/{id}/settlements` 列出已发布单，`GET /api/runs/{id}/settlements/{sheet}` 查询单张。
 
 ## 复算边界
 

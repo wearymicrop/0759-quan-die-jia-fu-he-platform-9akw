@@ -14,7 +14,8 @@
 | M4 优惠求解 | 比较合法券组合并分摊 | `GET /api/samples/{sample}/optimizer` | `app/modules/optimizer/solver.py` | `tests/test_optimizer.py` |
 | M5 退单冲回 | 沿原行分摊计算应退 | `GET /api/samples/{sample}/refunds` | `app/modules/refunds/replay.py` | `tests/test_refunds.py` |
 | M6 金额对账 | 核对净额、实收及剩余 | `GET /api/samples/{sample}/reconcile` | `app/modules/reconcile/balance.py` | `tests/test_reconcile.py` |
-| M7 追溯联单 | 串联原票、用券、退单与归档 | `GET /api/samples/{sample}/trace` | `app/modules/trace/register.py` | `tests/test_trace.py` |
+| M7 退货结算 | 同券多次退货形成唯一可发布复核单 | `GET /api/samples/{sample}/settlement` | `app/modules/settlement/builder.py` | `tests/test_settlement.py` |
+| M8 追溯联单 | 串联原票、用券、退单与归档 | `GET /api/samples/{sample}/trace` | `app/modules/trace/register.py` | `tests/test_trace.py` |
 
 ## 陷阱登记
 
@@ -34,6 +35,9 @@
 | TRAP-23 | 规则首尾相邻 | 切换时命中两版 | 版本有效期半开 | `app/modules/versions/effective.py` | `tests/test_versions.py::test_boundary_half_open` |
 | TRAP-24 | 平分一分钱 | 合计丢尾差 | 最大余数与明细键稳定裁决 | `app/modules/optimizer/allocation.py` | `tests/test_optimizer.py::test_rounding_tail_stable_id` |
 | TRAP-25 | 两个券版本同期 | 随意选择一个版本 | 保留两个版本并隔离销售 | `app/modules/versions/effective.py` | `tests/test_versions.py::test_overlap_evidence_points_to_both_versions` |
+| TRAP-26 | 分次退货后剩余商品不达原券门槛 | 按剩余篮重算并回滚已退款 | 已退锁定原票按件口径，剩余篮只重判资格并登记 `COUPON_THRESHOLD_DRIFT`，不二次冲减 | `app/modules/settlement/builder.py` | `tests/test_settlement.py::test_remaining_combo_threshold_drift` |
+| TRAP-27 | 同一退货重试或中断恢复 | 重复冲减库存与实付 | 复核单 ID 由批次摘要与原单号确定，发布表同键 `DO NOTHING`，并发只入账一次 | `app/modules/settlement/journal.py`、`app/store.py` | `tests/test_settlement.py::test_parallel_publish_inserts_once` |
+| TRAP-28 | 缺原票或对账不平仍发布 | 生成半张可发布单 | 原单隔离、逐行不平、退货主张阻断均为硬闸门；现金差额只列示不阻断 | `app/modules/settlement/builder.py` | `tests/test_settlement.py::test_publish_endpoint_gate_and_retry` |
 
 版本陷阱见 `sample_data/dirty/rules.json` 及 `sample_data/clean/rules.json`。流水用例见对应的 `events.jsonl`，精度超限与纯空输入由测试直接构造。
 
@@ -42,3 +46,11 @@
 - 商品毛额 − 实摊优惠 = 复算实付。记录实收与复算的逐笔差额。
 - 复算实付 = 应退 + 未退净额。实退金额的差额按退单列示。
 - 流水行 = 正常及业务隔离 + 来源隔离 + 重传 + 空行。
+
+## 退货结算裁决（M7）
+
+- 每张原票在一个批次内只形成一张复核单，`id = sha16(批次摘要, 原单号)`，与处理次数无关。
+- 已退部分锁定原票口径：沿原行减免按件冲减（最大余数、前件承接尾差），不因后续退货或门槛变化回滚。
+- 剩余篮用原票时点的有效券版本重判资格并重算组合；不达原券门槛记 `COUPON_THRESHOLD_DRIFT`，只解释差异来源，不改已退款、不新增减免。结构恒等式 `原实付 = 已退 + 剩余净额` 必须逐行对平。
+- 差异分两类：实退现金差额（`RETURN_CASH_GAP`）可发布，仅列示双方金额；`LINE_IMBALANCE`、`SALE_ISOLATED`、`RETURN_CLAIM_BLOCKED` 为硬阻断。缺原票的退货进 `orphan_returns`，不并入任何单。
+- 发布走独立 `settlements` 台账，同键插入 `DO NOTHING`：重试、中断恢复、并发提交都返回同一份记录，冲减只发生一次。

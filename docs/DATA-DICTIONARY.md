@@ -23,3 +23,21 @@
 ## 冲回和归档
 
 同一原单明细按退货 UTC、退单号排序。把原行减免先均分到件，余分给前几件，按累计已退件数获取本次减免。跨日时沿用同一原单明细。现金不一致保留双方金额及差额。`source_line` 是流水行号，`rule_index` 是规则列表序号，`original_line` 是原购流水行号。清单保存规则版本与规范化输入摘要，归档附件包含全部模块证据。
+
+## 退货结算复核单 `settlement`
+
+按原票逐单输出，复核单 `id` 为批次输入摘要与原单号的 16 位哈希，同批次重算稳定。
+
+| 字段 | 含义 |
+|---|---|
+| `original` | 原组合：入选券 `applied`、毛额、实摊优惠、复算实付与原实付 |
+| `lines` | 逐明细原件/已退/剩余件数，已退款、剩余净额与结构差 `gap`（0 即对平） |
+| `returns` | 已过账退货：商品额、冲减优惠、应退、实退、现金差，按原票按件口径 |
+| `blocked_returns` | 阻断退货（超件、缺行、早于原购等），留痕但不冲减 |
+| `remaining` | 剩余篮按原票时点规则重判的券资格与候选组合；退空为 `basket_empty` |
+| `coupon_carry` | 原组合各券在剩余篮的资格结论与合格基数 |
+| `differences` | 差异来源：`RETURN_CASH_GAP`（可发布）与 `COUPON_THRESHOLD_DRIFT`（仅解释） |
+| `blocking` / `publishable` | 硬阻断明细（`LINE_IMBALANCE`、`SALE_ISOLATED`、`RETURN_CLAIM_BLOCKED`）与发布结论 |
+| `orphan_returns` | 缺原票退货，单独留痕，不并入任何复核单 |
+
+发布接口 `POST /api/runs/{id}/settlements/{sheet}/publish` 在独立 `settlements` 表同键去重，重试返回 `reused=true` 且不重复冲减；硬阻断返回 `SETTLEMENT_NOT_PUBLISHABLE`（422）。

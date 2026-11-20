@@ -12,12 +12,14 @@ from app.modules.eligibility.handler import router as eligibility_api
 from app.modules.optimizer.handler import router as optimizer_api
 from app.modules.refunds.handler import router as refunds_api
 from app.modules.reconcile.handler import router as reconcile_api
+from app.modules.settlement.handler import router as settlement_api
 from app.modules.trace.handler import router as trace_api
 
 app = FastAPI(title=TITLE)
 app.add_exception_handler(DomainError, render_error)
 app.mount("/static", StaticFiles(directory=ROOT / "app/static"), name="static")
-for router in (receipts_api, versions_api, eligibility_api, optimizer_api, refunds_api, reconcile_api, trace_api, web.router):
+for router in (receipts_api, versions_api, eligibility_api, optimizer_api, refunds_api, reconcile_api,
+               settlement_api, trace_api, web.router):
     app.include_router(router)
 
 
